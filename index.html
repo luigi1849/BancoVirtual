@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mi Cajero</title>
+<meta name="theme-color" content="#0d3b66">
+<meta name="apple-mobile-web-app-title" content="Mi Cajero">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{--fascia:#dfe5ea;--bezel:#2b3138;--screen:#0d3b66;--screen2:#145088;--ink:#f4f8fb;--soft:#a9c4dd;--gold:#ffc53d;--ok:#6fe0a0;--bad:#ff8a7a;--key:#f6f8fa;--keyink:#1d2730;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -52,6 +59,12 @@ label{color:var(--soft);font-size:.9rem;display:block;margin-bottom:4px}
 .key:active{transform:translateY(2px);box-shadow:0 1px 0 #0006}
 .key.ok{background:#3da56a;color:#fff}.key.no{background:#d65a4a;color:#fff}
 .tiny{font-size:.85rem}
+.logo{width:34px;height:34px;flex:0 0 auto;display:block}
+.brand{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0 4px}
+.brand .logo{width:84px;height:84px}
+.brand b{font-size:1.5rem;letter-spacing:.04em}
+.ttl{display:flex;align-items:center;gap:10px}
+textarea{font:inherit;width:100%;padding:10px;border-radius:6px;border:2px solid #ffffff55;background:#06223c;color:var(--ink);min-height:70px;font-size:.85rem}
 </style>
 </head>
 <body>
@@ -77,13 +90,14 @@ function log(text,amt,sign){S.tx.unshift({d:new Date().toLocaleString('es-MX',{d
 function amt(){const v=parseFloat(($('amt')||{}).value);return isFinite(v)&&v>0?Math.round(v*100)/100:0;}
 const M=()=>msg?`<div class="msg ${msg.k}">${msg.t}</div>`:'';
 const back=(to='menu',label='Volver al menú')=>`<button class="opt back" onclick="go('${to}')">${label}</button>`;
-const bar=(t,s='')=>`<div class="bar"><h1>${t}</h1><span class="tiny" style="color:var(--soft)">${s}</span></div>`;
+const LOGO='<svg class="logo" viewBox="0 0 100 100" role="img" aria-label="Mi Cajero"><rect width="100" height="100" rx="22" fill="#0d3b66"/><rect x="10" y="10" width="80" height="80" rx="16" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.5"/><circle cx="50" cy="48" r="27" fill="#ffc53d"/><circle cx="50" cy="48" r="21" fill="none" stroke="#0d3b66" stroke-width="2"/><text x="50" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="30" fill="#0d3b66">$</text><rect x="30" y="78" width="40" height="5" rx="2.5" fill="#fff" fill-opacity=".8"/></svg>';
+const bar=(t,s='')=>`<div class="bar"><div class="ttl">${LOGO}<h1>${t}</h1></div><span class="tiny" style="color:var(--soft)">${s}</span></div>`;
 
 function render(){
   let h='';
   $('keypad').innerHTML='';
   if(scr==='pin'){
-    h=bar('Bienvenido')+`<p>Ingresa tu NIP de 4 dígitos</p><div class="dots">${[0,1,2,3].map(i=>`<i class="${i<pinBuf.length?'on':''}"></i>`).join('')}</div>${M()}`;
+    h=`<div class="brand">${LOGO}<b>MI CAJERO</b></div><p style="text-align:center">Ingresa tu NIP de 4 dígitos</p><div class="dots">${[0,1,2,3].map(i=>`<i class="${i<pinBuf.length?'on':''}"></i>`).join('')}</div>${M()}`;
     $('keypad').innerHTML=`<div class="keys">${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="key" onclick="pk('${n}')">${n}</button>`).join('')}<button class="key no" onclick="pk('c')" aria-label="Borrar">⌫</button><button class="key" onclick="pk('0')">0</button><button class="key ok" onclick="pk('e')">OK</button></div><p class="tiny" style="text-align:center;margin-top:8px;color:var(--keyink)">NIP inicial: 1234 (puedes cambiarlo en Ajustes)</p>`;
   }
   else if(scr==='menu'){
@@ -143,6 +157,12 @@ function render(){
   }
   else if(scr==='set'){
     h=bar('Ajustes')+M()+`<div class="card"><label for="np">Nuevo NIP (4 dígitos)</label><input id="np" type="password" inputmode="numeric" maxlength="4" style="margin-bottom:8px"><button class="opt" onclick="chPin()">Cambiar NIP</button></div>
+    <div class="card"><h2 style="margin:0 0 6px">Respaldo de datos</h2><p class="tiny" style="margin-bottom:8px">Guarda una copia de tus saldos, tarjetas, objetivos y movimientos. No incluye tu NIP.</p>
+      <div class="row"><button class="opt" onclick="exportData()">Exportar archivo</button><button class="opt" onclick="copyData()">Copiar JSON</button></div>
+      <label for="imp" style="margin-top:10px">Importar respaldo (.json)</label><input id="imp" type="file" accept=".json,application/json" onchange="importFile(this)" style="font-size:.9rem">
+      <label for="pt" style="margin-top:10px">O pega aquí el JSON</label><textarea id="pt" placeholder='{"app":"mi-cajero",...}'></textarea>
+      <button class="opt" style="margin-top:8px" onclick="importText()">Importar texto pegado</button>
+      ${f.pending?`<div class="msg" style="margin-top:10px">Respaldo listo: ahorros ${money(f.pending.savings)}, ahorro para deudas ${money(f.pending.debtSavings)}, ${f.pending.cards.length} tarjeta(s), ${f.pending.goals.length} objetivo(s), ${f.pending.tx.length} movimiento(s). Esto <b>reemplazará</b> tus datos actuales.</div><button class="opt exit" style="margin-top:8px" onclick="applyImport()">Sí, reemplazar mis datos</button>`:''}</div>
     <div class="card"><p class="tiny" style="margin-bottom:8px">Tus datos se guardan solo en este navegador.</p><button class="opt exit" onclick="resetAll()">${f.confirm?'Toca otra vez para borrar todo':'Borrar todos mis datos'}</button></div>${back()}`;
   }
   $('screen').innerHTML=h;
@@ -213,11 +233,47 @@ function chPin(){
   if(!/^\d{4}$/.test(p)){go('set',{},{k:'err',t:'El NIP debe tener exactamente 4 números.'});return;}
   S.pin=p;save();go('set',{},{k:'ok',t:'NIP actualizado.'});
 }
+const num=v=>{v=Number(v);return isFinite(v)?v:0;};
+function clean(o){
+  if(!o||typeof o!=='object'||o.app!=='mi-cajero'||!o.data)throw new Error('formato');
+  const d=o.data;
+  return {savings:num(d.savings),debtSavings:num(d.debtSavings),
+    cards:(Array.isArray(d.cards)?d.cards:[]).map(c=>({id:String(c.id||uid()),name:String(c.name||'Tarjeta').slice(0,40),debt:Math.max(0,num(c.debt)),limit:Math.max(0,num(c.limit))})),
+    goals:(Array.isArray(d.goals)?d.goals:[]).map(g=>({id:String(g.id||uid()),name:String(g.name||'Objetivo').slice(0,40),target:Math.max(0,num(g.target)),saved:Math.max(0,num(g.saved))})),
+    tx:(Array.isArray(d.tx)?d.tx:[]).slice(0,100).map(t=>({d:String(t.d||''),text:String(t.text||'').slice(0,120),amt:num(t.amt),sign:t.sign>0?1:t.sign<0?-1:0}))};
+}
+function payload(){const {pin,...data}=S;return JSON.stringify({app:'mi-cajero',version:1,exported:new Date().toISOString(),data},null,2);}
+function exportData(){
+  try{
+    const b=new Blob([payload()],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');
+    a.href=u;a.download='mi-cajero-respaldo-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),2000);
+    go('set',{},{k:'ok',t:'Respaldo generado. Revisa tus descargas. Si no aparece, usa "Copiar JSON".'});
+  }catch(e){go('set',{},{k:'err',t:'No se pudo descargar. Usa "Copiar JSON".'});}
+}
+async function copyData(){
+  try{await navigator.clipboard.writeText(payload());go('set',{},{k:'ok',t:'JSON copiado. Pégalo en un lugar seguro (notas, correo a ti mismo).'});}
+  catch(e){go('set',{},{k:'err',t:'Tu navegador no permitió copiar. Usa "Exportar archivo".'});}
+}
+function stage(text){
+  try{go('set',{pending:clean(JSON.parse(text))});}
+  catch(e){go('set',{},{k:'err',t:'Ese archivo no parece un respaldo válido de Mi Cajero.'});}
+}
+function importFile(inp){
+  const file=inp.files&&inp.files[0];if(!file)return;
+  const r=new FileReader();r.onload=()=>stage(r.result);r.onerror=()=>go('set',{},{k:'err',t:'No se pudo leer el archivo.'});r.readAsText(file);
+}
+function importText(){const t=$('pt').value.trim();if(!t){go('set',{},{k:'err',t:'Pega primero el JSON.'});return;}stage(t);}
+function applyImport(){
+  if(!f.pending)return;
+  S=Object.assign(fresh(),f.pending,{pin:S.pin});save();go('set',{},{k:'ok',t:'Respaldo importado correctamente.'});
+}
 function resetAll(){
   if(!f.confirm){go('set',{confirm:true});return;}
   S=fresh();save();pinBuf='';go('pin',{},{k:'ok',t:'Datos borrados. NIP: 1234.'});
 }
 render();
+if('serviceWorker' in navigator&&/^https?:/.test(location.protocol)){try{navigator.serviceWorker.register('sw.js').catch(()=>{});}catch(e){}}
 </script>
 </body>
 </html>
