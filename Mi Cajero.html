@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi Cajero</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--fascia:#dfe5ea;--bezel:#2b3138;--screen:#0d3b66;--screen2:#145088;--ink:#f4f8fb;--soft:#a9c4dd;--gold:#ffc53d;--ok:#6fe0a0;--bad:#ff8a7a;--key:#f6f8fa;--keyink:#1d2730;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fascia:#20262c;--bezel:#0f1215;--key:#39424b;--keyink:#eef2f5}}
+:root[data-theme="dark"]{--fascia:#20262c;--bezel:#0f1215;--key:#39424b;--keyink:#eef2f5}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--fascia);font-family:'Atkinson Hyperlegible',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--ink);min-height:100vh;display:flex;justify-content:center;padding:14px}
+.atm{width:100%;max-width:560px}
+.slot{height:10px;width:55%;margin:0 auto 12px;background:var(--bezel);border-radius:6px;box-shadow:inset 0 3px 4px #0008}
+.bezel{background:var(--bezel);padding:14px;border-radius:18px}
+.screen{background:linear-gradient(180deg,var(--screen2),var(--screen));border-radius:8px;min-height:430px;padding:18px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:1.35rem;margin:0}
+h2{font-size:1.05rem;margin:6px 0 0;color:var(--gold)}
+p{margin:0;color:var(--soft);line-height:1.4}
+.bar{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px solid #ffffff30;padding-bottom:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.grid{grid-template-columns:1fr}}
+button,.opt{font:inherit;cursor:pointer}
+.opt{background:#ffffff14;color:var(--ink);border:1px solid #ffffff40;border-left:6px solid var(--gold);border-radius:6px;padding:13px 12px;text-align:left;min-height:50px;width:100%}
+.opt:hover{background:#ffffff26}
+.opt:disabled{opacity:.4;cursor:not-allowed}
+.opt small{display:block;color:var(--soft);margin-top:2px}
+.opt.exit{border-left-color:var(--bad)}
+.opt.back{border-left-color:var(--soft)}
+.list{display:flex;flex-direction:column;gap:8px}
+input{font:inherit;width:100%;padding:12px;border-radius:6px;border:2px solid #ffffff55;background:#06223c;color:var(--ink);font-size:1.2rem}
+input:focus-visible,button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+label{color:var(--soft);font-size:.9rem;display:block;margin-bottom:4px}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.msg{padding:10px 12px;border-radius:6px;background:#00000040}
+.msg.ok{color:var(--ok);border-left:5px solid var(--ok)}
+.msg.err{color:var(--bad);border-left:5px solid var(--bad)}
+.big{font-size:1.9rem;font-weight:700}
+.line{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px dashed #ffffff30}
+.neg{color:var(--bad)}.pos{color:var(--ok)}
+.prog{height:12px;background:#00000050;border-radius:6px;overflow:hidden;margin:6px 0}
+.prog>i{display:block;height:100%;background:var(--gold)}
+.card{background:#00000030;border-radius:8px;padding:12px}
+.dots{display:flex;gap:14px;justify-content:center;margin:12px 0}
+.dots i{width:18px;height:18px;border-radius:50%;border:2px solid var(--gold)}
+.dots i.on{background:var(--gold)}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px auto 0;max-width:300px}
+.key{background:var(--key);color:var(--keyink);border:0;border-radius:8px;padding:16px 0;font-size:1.3rem;font-weight:700;box-shadow:0 3px 0 #0006}
+.key:active{transform:translateY(2px);box-shadow:0 1px 0 #0006}
+.key.ok{background:#3da56a;color:#fff}.key.no{background:#d65a4a;color:#fff}
+.tiny{font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="atm">
+  <div class="slot"></div>
+  <div class="bezel"><div class="screen" id="screen" aria-live="polite"></div></div>
+  <div id="keypad"></div>
+</div>
+<script>
+const KEY='cajero_finanzas_v1';
+const fresh=()=>({pin:'1234',savings:0,debtSavings:0,cards:[],goals:[],tx:[]});
+let S=fresh();
+try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(fresh(),JSON.parse(r));}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}};
+const $=id=>document.getElementById(id);
+const money=n=>(n<0?'-':'')+Math.abs(n).toLocaleString('es-MX',{style:'currency',currency:'MXN'});
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let scr='pin',f={},msg=null,pinBuf='';
+
+function go(s,o,m){scr=s;f=o||{};msg=m||null;render();}
+function log(text,amt,sign){S.tx.unshift({d:new Date().toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}),text,amt,sign});S.tx=S.tx.slice(0,100);}
+function amt(){const v=parseFloat(($('amt')||{}).value);return isFinite(v)&&v>0?Math.round(v*100)/100:0;}
+const M=()=>msg?`<div class="msg ${msg.k}">${msg.t}</div>`:'';
+const back=(to='menu',label='Volver al menú')=>`<button class="opt back" onclick="go('${to}')">${label}</button>`;
+const bar=(t,s='')=>`<div class="bar"><h1>${t}</h1><span class="tiny" style="color:var(--soft)">${s}</span></div>`;
+
+function render(){
+  let h='';
+  $('keypad').innerHTML='';
+  if(scr==='pin'){
+    h=bar('Bienvenido')+`<p>Ingresa tu NIP de 4 dígitos</p><div class="dots">${[0,1,2,3].map(i=>`<i class="${i<pinBuf.length?'on':''}"></i>`).join('')}</div>${M()}`;
+    $('keypad').innerHTML=`<div class="keys">${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="key" onclick="pk('${n}')">${n}</button>`).join('')}<button class="key no" onclick="pk('c')" aria-label="Borrar">⌫</button><button class="key" onclick="pk('0')">0</button><button class="key ok" onclick="pk('e')">OK</button></div><p class="tiny" style="text-align:center;margin-top:8px;color:var(--keyink)">NIP inicial: 1234 (puedes cambiarlo en Ajustes)</p>`;
+  }
+  else if(scr==='menu'){
+    const debt=S.cards.reduce((a,c)=>a+c.debt,0);
+    h=bar('¿Qué deseas hacer?')+M()+`<div class="grid">
+      <button class="opt" onclick="go('dep1')">Ingresar dinero<small>Ahorro, tarjeta, objetivo</small></button>
+      <button class="opt" onclick="go('wd1')">Retirar o comprar<small>Con ahorro o tarjeta</small></button>
+      <button class="opt" onclick="go('acc')">Mis cuentas<small>Saldos y tarjetas</small></button>
+      <button class="opt" onclick="go('goals')">Mis objetivos<small>${S.goals.length} en curso</small></button>
+      <button class="opt" onclick="go('hist')">Movimientos<small>Historial</small></button>
+      <button class="opt" onclick="go('set')">Ajustes<small>NIP y datos</small></button>
+      <button class="opt exit" style="grid-column:1/-1" onclick="pinBuf='';go('pin')">Salir y retirar tarjeta</button></div>
+      <div class="card tiny"><div class="line"><span>Ahorros</span><b>${money(S.savings)}</b></div><div class="line"><span>Ahorro para deudas</span><b>${money(S.debtSavings)}</b></div><div class="line" style="border:0"><span>Deuda en tarjetas</span><b class="${debt?'neg':''}">${money(debt)}</b></div></div>`;
+  }
+  else if(scr==='dep1'||scr==='wd2'){
+    const dep=scr==='dep1';
+    h=bar(dep?'Ingresar dinero':(f.type==='compra'?'Registrar compra':'Retirar dinero'))+M()+
+    `<div><label for="amt">Monto</label><input id="amt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="${f.amount||''}" autofocus></div>
+     <div><label for="note">${dep?'Concepto (opcional)':(f.type==='compra'?'¿Qué compraste?':'Concepto (opcional)')}</label><input id="note" type="text" maxlength="40" value="${esc(f.note||'')}" style="font-size:1rem"></div>
+     <button class="opt" onclick="step2('${dep?'dep2':'wd3'}')">Continuar</button>${back()}`;
+  }
+  else if(scr==='dep2'){
+    h=bar('¿A dónde va el dinero?',money(f.amount))+M()+`<div class="list">
+      <button class="opt" onclick="deposit('savings')">Ahorros<small>Saldo ${money(S.savings)}</small></button>
+      <button class="opt" onclick="deposit('debtSavings')">Ahorro para pagar deudas<small>Saldo ${money(S.debtSavings)}</small></button>
+      ${S.cards.map(c=>`<button class="opt" onclick="deposit('card','${c.id}')">Pagar tarjeta ${esc(c.name)}<small>Debes ${money(c.debt)}</small></button>`).join('')}
+      ${S.goals.map(g=>`<button class="opt" onclick="deposit('goal','${g.id}')">Objetivo: ${esc(g.name)}<small>${money(g.saved)} de ${money(g.target)}</small></button>`).join('')}
+      <button class="opt back" onclick="go('dep1',f)">Cambiar monto</button></div>`;
+  }
+  else if(scr==='wd1'){
+    h=bar('Retirar o comprar')+M()+`<p>¿Qué tipo de movimiento es?</p><div class="grid">
+      <button class="opt" onclick="go('wd2',{type:'retiro'})">Retiro<small>Sacar efectivo</small></button>
+      <button class="opt" onclick="go('wd2',{type:'compra'})">Compra<small>Algo que pagaste</small></button></div>${back()}`;
+  }
+  else if(scr==='wd3'){
+    const a=f.amount;
+    h=bar(`¿De dónde sale?`,money(a))+M()+`<div class="list">
+      <button class="opt" ${S.savings<a?'disabled':''} onclick="withdraw('savings')">Ahorros<small>Saldo ${money(S.savings)}</small></button>
+      <button class="opt" ${S.debtSavings<a?'disabled':''} onclick="withdraw('debtSavings')">Ahorro para pagar deudas<small>Saldo ${money(S.debtSavings)}</small></button>
+      ${S.cards.map(c=>{const no=c.limit>0&&c.debt+a>c.limit;return `<button class="opt" ${no?'disabled':''} onclick="withdraw('card','${c.id}')">Tarjeta de crédito ${esc(c.name)}<small>${no?'Excede tu límite':'Deuda actual '+money(c.debt)}${c.limit>0&&!no?' · Disponible '+money(c.limit-c.debt):''}</small></button>`}).join('')}
+      <button class="opt back" onclick="go('wd2',f)">Cambiar monto</button></div>`;
+  }
+  else if(scr==='acc'){
+    h=bar('Mis cuentas')+M()+`<div class="card"><div class="line"><span>Ahorros</span><b class="pos">${money(S.savings)}</b></div><div class="line" style="border:0"><span>Ahorro para pagar deudas</span><b class="pos">${money(S.debtSavings)}</b></div></div>
+    <h2>Tarjetas de crédito</h2>
+    ${S.cards.length?S.cards.map(c=>{const p=c.limit>0?Math.min(100,c.debt/c.limit*100):0;return `<div class="card"><div class="line" style="border:0"><b>${esc(c.name)}</b><span class="${c.debt?'neg':'pos'}">Debes ${money(c.debt)}</span></div>${c.limit>0?`<div class="prog"><i style="width:${p}%"></i></div><span class="tiny">Límite ${money(c.limit)} · usado ${p.toFixed(0)}%</span>`:''}<div style="margin-top:6px"><button class="opt exit" style="min-height:36px;padding:6px 10px" onclick="delCard('${c.id}')">Eliminar tarjeta</button></div></div>`}).join(''):'<p>Aún no tienes tarjetas. Agrega una abajo.</p>'}
+    <div class="card"><label for="cn">Nueva tarjeta</label><input id="cn" placeholder="Nombre (ej. BBVA)" style="font-size:1rem;margin-bottom:8px"><div class="row"><input id="cd" type="number" inputmode="decimal" placeholder="Deuda actual" style="font-size:1rem"><input id="cl" type="number" inputmode="decimal" placeholder="Límite (opcional)" style="font-size:1rem"></div><button class="opt" style="margin-top:8px" onclick="addCard()">Agregar tarjeta</button></div>${back()}`;
+  }
+  else if(scr==='goals'){
+    h=bar('Mis objetivos')+M()+(S.goals.length?S.goals.map(g=>{const p=g.target>0?Math.min(100,g.saved/g.target*100):0;return `<div class="card"><div class="line" style="border:0;padding-bottom:0"><b>${esc(g.name)}</b><span>${p.toFixed(0)}%</span></div><div class="prog"><i style="width:${p}%"></i></div><div class="tiny" style="color:var(--soft)">${money(g.saved)} de ${money(g.target)} · faltan ${money(Math.max(0,g.target-g.saved))}</div>
+      <div class="row" style="margin-top:8px"><input id="g_${g.id}" type="number" inputmode="decimal" placeholder="Monto" style="font-size:1rem"><button class="opt" style="width:auto;flex:0 0 auto" onclick="contrib('${g.id}')">Abonar desde ahorros</button></div>
+      <button class="opt exit" style="margin-top:8px;min-height:36px;padding:6px 10px" onclick="delGoal('${g.id}')">Eliminar (lo ahorrado regresa a Ahorros)</button></div>`}).join(''):'<p>Aún no tienes objetivos. Crea el primero: un viaje, un fondo de emergencia, un coche…</p>')+
+    `<div class="card"><label for="gn">Nuevo objetivo</label><input id="gn" placeholder="Nombre" maxlength="40" style="font-size:1rem;margin-bottom:8px"><input id="gt" type="number" inputmode="decimal" placeholder="Meta en pesos" style="font-size:1rem"><button class="opt" style="margin-top:8px" onclick="addGoal()">Crear objetivo</button></div>${back()}`;
+  }
+  else if(scr==='hist'){
+    h=bar('Movimientos','Últimos '+Math.min(S.tx.length,30))+(S.tx.length?`<div>${S.tx.slice(0,30).map(t=>`<div class="line"><span>${esc(t.text)}<br><span class="tiny" style="color:var(--soft)">${t.d}</span></span><b class="${t.sign>0?'pos':t.sign<0?'neg':''}">${t.sign>0?'+':t.sign<0?'-':''}${money(t.amt)}</b></div>`).join('')}</div>`:'<p>Todavía no hay movimientos.</p>')+back();
+  }
+  else if(scr==='set'){
+    h=bar('Ajustes')+M()+`<div class="card"><label for="np">Nuevo NIP (4 dígitos)</label><input id="np" type="password" inputmode="numeric" maxlength="4" style="margin-bottom:8px"><button class="opt" onclick="chPin()">Cambiar NIP</button></div>
+    <div class="card"><p class="tiny" style="margin-bottom:8px">Tus datos se guardan solo en este navegador.</p><button class="opt exit" onclick="resetAll()">${f.confirm?'Toca otra vez para borrar todo':'Borrar todos mis datos'}</button></div>${back()}`;
+  }
+  $('screen').innerHTML=h;
+  const a=$('amt');if(a&&!a.value)a.focus();
+}
+
+function pk(k){
+  if(k==='c')pinBuf=pinBuf.slice(0,-1);
+  else if(k==='e'){chk();return;}
+  else if(pinBuf.length<4)pinBuf+=k;
+  msg=null;render();
+  if(pinBuf.length===4)setTimeout(chk,150);
+}
+function chk(){
+  if(pinBuf===S.pin){pinBuf='';go('menu');}
+  else{pinBuf='';go('pin',{},{k:'err',t:'NIP incorrecto. Inténtalo de nuevo.'});}
+}
+document.addEventListener('keydown',e=>{
+  if(scr!=='pin')return;
+  if(/^\d$/.test(e.key))pk(e.key);else if(e.key==='Backspace')pk('c');else if(e.key==='Enter')pk('e');
+});
+
+function step2(next){
+  const a=amt(),note=$('note').value.trim();
+  const keep={type:f.type,amount:a,note};
+  if(!a){go(scr,keep,{k:'err',t:'Escribe un monto mayor a cero.'});return;}
+  go(next,keep);
+}
+function deposit(kind,id){
+  const a=f.amount,n=f.note?` (${f.note})`:'';let t;
+  if(kind==='savings'){S.savings+=a;t='Ingreso a Ahorros';}
+  else if(kind==='debtSavings'){S.debtSavings+=a;t='Ingreso a Ahorro para deudas';}
+  else if(kind==='card'){const c=S.cards.find(x=>x.id===id);if(a>c.debt){go('dep2',f,{k:'err',t:`Solo debes ${money(c.debt)} en ${esc(c.name)}. Reduce el monto.`});return;}c.debt-=a;t='Pago de tarjeta '+c.name;}
+  else{const g=S.goals.find(x=>x.id===id);g.saved+=a;t='Objetivo: '+g.name;}
+  log(t+n,a,1);save();go('menu',{},{k:'ok',t:`Listo: ${money(a)} · ${esc(t)}.`});
+}
+function withdraw(kind,id){
+  const a=f.amount,compra=f.type==='compra',lab=compra?'Compra':'Retiro',n=f.note?`: ${f.note}`:'';let src;
+  if(kind==='savings'){if(S.savings<a)return;S.savings-=a;src='Ahorros';}
+  else if(kind==='debtSavings'){if(S.debtSavings<a)return;S.debtSavings-=a;src='Ahorro para deudas';}
+  else{const c=S.cards.find(x=>x.id===id);c.debt+=a;src='tarjeta '+c.name;}
+  log(`${lab}${n} · ${src}`,a,-1);save();
+  go('menu',{},{k:'ok',t:`${lab} de ${money(a)} registrado con ${esc(src)}.`});
+}
+function addCard(){
+  const n=$('cn').value.trim(),d=parseFloat($('cd').value)||0,l=parseFloat($('cl').value)||0;
+  if(!n){go('acc',{},{k:'err',t:'Ponle un nombre a la tarjeta.'});return;}
+  S.cards.push({id:uid(),name:n,debt:Math.max(0,d),limit:Math.max(0,l)});save();go('acc',{},{k:'ok',t:'Tarjeta agregada.'});
+}
+function delCard(id){S.cards=S.cards.filter(c=>c.id!==id);save();go('acc',{},{k:'ok',t:'Tarjeta eliminada.'});}
+function addGoal(){
+  const n=$('gn').value.trim(),t=parseFloat($('gt').value);
+  if(!n||!(t>0)){go('goals',{},{k:'err',t:'Escribe un nombre y una meta mayor a cero.'});return;}
+  S.goals.push({id:uid(),name:n,target:t,saved:0});save();go('goals',{},{k:'ok',t:'Objetivo creado.'});
+}
+function contrib(id){
+  const g=S.goals.find(x=>x.id===id),a=parseFloat($('g_'+id).value);
+  if(!(a>0)){go('goals',{},{k:'err',t:'Escribe un monto válido.'});return;}
+  if(a>S.savings){go('goals',{},{k:'err',t:`Tus ahorros son ${money(S.savings)}. Ingresa dinero primero.`});return;}
+  S.savings-=a;g.saved+=a;log('Abono a objetivo: '+g.name,a,0);save();go('goals',{},{k:'ok',t:`Abonaste ${money(a)} a ${esc(g.name)}.`});
+}
+function delGoal(id){
+  const g=S.goals.find(x=>x.id===id);S.savings+=g.saved;if(g.saved)log('Objetivo eliminado: '+g.name,g.saved,0);
+  S.goals=S.goals.filter(x=>x.id!==id);save();go('goals',{},{k:'ok',t:'Objetivo eliminado.'});
+}
+function chPin(){
+  const p=$('np').value;
+  if(!/^\d{4}$/.test(p)){go('set',{},{k:'err',t:'El NIP debe tener exactamente 4 números.'});return;}
+  S.pin=p;save();go('set',{},{k:'ok',t:'NIP actualizado.'});
+}
+function resetAll(){
+  if(!f.confirm){go('set',{confirm:true});return;}
+  S=fresh();save();pinBuf='';go('pin',{},{k:'ok',t:'Datos borrados. NIP: 1234.'});
+}
+render();
+</script>
+</body>
+</html>
