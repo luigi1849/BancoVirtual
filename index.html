@@ -75,7 +75,7 @@ textarea{font:inherit;width:100%;padding:10px;border-radius:6px;border:2px solid
 </div>
 <script>
 const KEY='cajero_finanzas_v1';
-const fresh=()=>({pin:'1234',savings:0,debtSavings:0,cards:[],goals:[],tx:[]});
+const fresh=()=>({pin:'1234',debit:0,savings:0,debtSavings:0,cards:[],goals:[],tx:[]});
 let S=fresh();
 try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(fresh(),JSON.parse(r));}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}};
@@ -90,6 +90,8 @@ function log(text,amt,sign){S.tx.unshift({d:new Date().toLocaleString('es-MX',{d
 function amt(){const v=parseFloat(($('amt')||{}).value);return isFinite(v)&&v>0?Math.round(v*100)/100:0;}
 const M=()=>msg?`<div class="msg ${msg.k}">${msg.t}</div>`:'';
 const back=(to='menu',label='Volver al menú')=>`<button class="opt back" onclick="go('${to}')">${label}</button>`;
+const debtTotal=()=>S.debtSavings+S.cards.reduce((a,c)=>a+(c.saved||0),0);
+const r2=n=>Math.round(n*100)/100;
 const LOGO='<svg class="logo" viewBox="0 0 100 100" role="img" aria-label="Mi Cajero"><rect width="100" height="100" rx="22" fill="#0d3b66"/><rect x="10" y="10" width="80" height="80" rx="16" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.5"/><circle cx="50" cy="48" r="27" fill="#ffc53d"/><circle cx="50" cy="48" r="21" fill="none" stroke="#0d3b66" stroke-width="2"/><text x="50" y="59" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="30" fill="#0d3b66">$</text><rect x="30" y="78" width="40" height="5" rx="2.5" fill="#fff" fill-opacity=".8"/></svg>';
 const bar=(t,s='')=>`<div class="bar"><div class="ttl">${LOGO}<h1>${t}</h1></div><span class="tiny" style="color:var(--soft)">${s}</span></div>`;
 
@@ -110,7 +112,7 @@ function render(){
       <button class="opt" onclick="go('hist')">Movimientos<small>Historial</small></button>
       <button class="opt" onclick="go('set')">Ajustes<small>NIP y datos</small></button>
       <button class="opt exit" style="grid-column:1/-1" onclick="pinBuf='';go('pin')">Salir y retirar tarjeta</button></div>
-      <div class="card tiny"><div class="line"><span>Ahorros</span><b>${money(S.savings)}</b></div><div class="line"><span>Ahorro para deudas</span><b>${money(S.debtSavings)}</b></div><div class="line" style="border:0"><span>Deuda en tarjetas</span><b class="${debt?'neg':''}">${money(debt)}</b></div></div>`;
+      <div class="card tiny"><div class="line"><span>Ahorros</span><b>${money(S.savings)}</b></div><div class="line"><span>Tarjeta de débito</span><b>${money(S.debit)}</b></div><div class="line"><span>Ahorro para deudas</span><b>${money(debtTotal())}</b></div><div class="line" style="border:0"><span>Deuda en tarjetas</span><b class="${debt?'neg':''}">${money(debt)}</b></div></div>`;
   }
   else if(scr==='dep1'||scr==='wd2'){
     const dep=scr==='dep1';
@@ -122,28 +124,37 @@ function render(){
   else if(scr==='dep2'){
     h=bar('¿A dónde va el dinero?',money(f.amount))+M()+`<div class="list">
       <button class="opt" onclick="deposit('savings')">Ahorros<small>Saldo ${money(S.savings)}</small></button>
-      <button class="opt" onclick="deposit('debtSavings')">Ahorro para pagar deudas<small>Saldo ${money(S.debtSavings)}</small></button>
-      ${S.cards.map(c=>`<button class="opt" onclick="deposit('card','${c.id}')">Pagar tarjeta ${esc(c.name)}<small>Debes ${money(c.debt)}</small></button>`).join('')}
-      ${S.goals.map(g=>`<button class="opt" onclick="deposit('goal','${g.id}')">Objetivo: ${esc(g.name)}<small>${money(g.saved)} de ${money(g.target)}</small></button>`).join('')}
+      <button class="opt" onclick="go('dep3',f)">Ahorro para pagar deudas<small>Total ${money(debtTotal())} · elegirás la tarjeta</small></button>
+      <button class="opt" onclick="deposit('debit')">Depósito a tarjeta de débito<small>Saldo ${money(S.debit)}</small></button>
       <button class="opt back" onclick="go('dep1',f)">Cambiar monto</button></div>`;
+  }
+  else if(scr==='pay1'){
+    h=bar('Pagar tarjeta')+M()+`<p>Elige la tarjeta. Se pagará lo que tengas ahorrado para ella.</p><div class="list">${S.cards.length?S.cards.map(c=>{const a=r2(Math.min(c.saved||0,c.debt));return `<button class="opt" ${a>0?'':'disabled'} onclick="payFromSaved('${c.id}','menu')">Tarjeta ${esc(c.name)}<small>Ahorrado ${money(c.saved||0)} · Debes ${money(c.debt)}${a>0?' · Se pagarán '+money(a):(c.debt<=0?' · Sin deuda':' · Sin ahorro')}</small></button>`}).join(''):'<p>Aún no tienes tarjetas. Agrégalas en "Mis cuentas".</p>'}${back('wd1','Regresar')}</div>`;
+  }
+  else if(scr==='dep3'){
+    h=bar('¿Para qué tarjeta es el ahorro?',money(f.amount))+M()+`<div class="list">${S.cards.length?S.cards.map(c=>`<button class="opt" onclick="deposit('cardSave','${c.id}')">Tarjeta ${esc(c.name)}<small>Ahorrado ${money(c.saved||0)} · Debes ${money(c.debt)}</small></button>`).join(''):'<p>Primero agrega una tarjeta en "Mis cuentas".</p>'}<button class="opt back" onclick="go('dep2',f)">Regresar</button></div>`;
   }
   else if(scr==='wd1'){
     h=bar('Retirar o comprar')+M()+`<p>¿Qué tipo de movimiento es?</p><div class="grid">
       <button class="opt" onclick="go('wd2',{type:'retiro'})">Retiro<small>Sacar efectivo</small></button>
-      <button class="opt" onclick="go('wd2',{type:'compra'})">Compra<small>Algo que pagaste</small></button></div>${back()}`;
+      <button class="opt" onclick="go('wd2',{type:'compra'})">Compra<small>Algo que pagaste</small></button>
+      <button class="opt" style="grid-column:1/-1" onclick="go('pay1')">Pagar tarjeta<small>Se paga con el ahorro de la tarjeta que elijas</small></button></div>${back()}`;
   }
   else if(scr==='wd3'){
     const a=f.amount;
     h=bar(`¿De dónde sale?`,money(a))+M()+`<div class="list">
       <button class="opt" ${S.savings<a?'disabled':''} onclick="withdraw('savings')">Ahorros<small>Saldo ${money(S.savings)}</small></button>
-      <button class="opt" ${S.debtSavings<a?'disabled':''} onclick="withdraw('debtSavings')">Ahorro para pagar deudas<small>Saldo ${money(S.debtSavings)}</small></button>
+      <button class="opt" ${S.debit<a?'disabled':''} onclick="withdraw('debit')">Tarjeta de débito<small>Saldo ${money(S.debit)}</small></button>
+      ${S.debtSavings>0?`<button class="opt" ${S.debtSavings<a?'disabled':''} onclick="withdraw('debtSavings')">Ahorro para deudas (sin asignar)<small>Saldo ${money(S.debtSavings)}</small></button>`:''}
+      ${S.cards.filter(c=>(c.saved||0)>0).map(c=>`<button class="opt" ${c.saved<a?'disabled':''} onclick="withdraw('cardSave','${c.id}')">Ahorro para tarjeta ${esc(c.name)}<small>Saldo ${money(c.saved)}</small></button>`).join('')}
       ${S.cards.map(c=>{const no=c.limit>0&&c.debt+a>c.limit;return `<button class="opt" ${no?'disabled':''} onclick="withdraw('card','${c.id}')">Tarjeta de crédito ${esc(c.name)}<small>${no?'Excede tu límite':'Deuda actual '+money(c.debt)}${c.limit>0&&!no?' · Disponible '+money(c.limit-c.debt):''}</small></button>`}).join('')}
       <button class="opt back" onclick="go('wd2',f)">Cambiar monto</button></div>`;
   }
   else if(scr==='acc'){
-    h=bar('Mis cuentas')+M()+`<div class="card"><div class="line"><span>Ahorros</span><b class="pos">${money(S.savings)}</b></div><div class="line" style="border:0"><span>Ahorro para pagar deudas</span><b class="pos">${money(S.debtSavings)}</b></div></div>
+    h=bar('Mis cuentas')+M()+`<div class="card"><div class="line"><span>Ahorros</span><b class="pos">${money(S.savings)}</b></div><div class="line"><span>Tarjeta de débito</span><b class="pos">${money(S.debit)}</b></div><div class="line" style="border:0"><span>Ahorro para pagar deudas (total)</span><b class="pos">${money(debtTotal())}</b></div></div>
+    ${S.debtSavings>0?`<div class="card"><div class="line" style="border:0"><span>Ahorro para deudas sin asignar</span><b>${money(S.debtSavings)}</b></div><p class="tiny" style="margin-bottom:6px">Asígnalo a una tarjeta:</p><div class="list">${S.cards.map(c=>`<button class="opt" style="min-height:40px;padding:8px 10px" onclick="assignLegacy('${c.id}')">Pasar a ${esc(c.name)}</button>`).join('')||'<p class="tiny">Agrega una tarjeta primero.</p>'}</div></div>`:''}
     <h2>Tarjetas de crédito</h2>
-    ${S.cards.length?S.cards.map(c=>{const p=c.limit>0?Math.min(100,c.debt/c.limit*100):0;return `<div class="card"><div class="line" style="border:0"><b>${esc(c.name)}</b><span class="${c.debt?'neg':'pos'}">Debes ${money(c.debt)}</span></div>${c.limit>0?`<div class="prog"><i style="width:${p}%"></i></div><span class="tiny">Límite ${money(c.limit)} · usado ${p.toFixed(0)}%</span>`:''}<div style="margin-top:6px"><button class="opt exit" style="min-height:36px;padding:6px 10px" onclick="delCard('${c.id}')">Eliminar tarjeta</button></div></div>`}).join(''):'<p>Aún no tienes tarjetas. Agrega una abajo.</p>'}
+    ${S.cards.length?S.cards.map(c=>{const p=c.limit>0?Math.min(100,c.debt/c.limit*100):0;return `<div class="card"><div class="line" style="border:0"><b>${esc(c.name)}</b><span class="${c.debt?'neg':'pos'}">Debes ${money(c.debt)}</span></div>${c.limit>0?`<div class="prog"><i style="width:${p}%"></i></div><span class="tiny">Límite ${money(c.limit)} · usado ${p.toFixed(0)}%</span>`:''}<div class="tiny" style="color:var(--soft);margin-top:6px">Ahorro para esta tarjeta: <b class="pos">${money(c.saved||0)}</b></div><div class="row" style="margin-top:6px"><button class="opt" style="min-height:36px;padding:6px 10px" ${(c.saved||0)>0&&c.debt>0?'':'disabled'} onclick="payFromSaved('${c.id}')">Pagar con su ahorro</button><button class="opt exit" style="min-height:36px;padding:6px 10px" onclick="delCard('${c.id}')">Eliminar tarjeta</button></div></div>`}).join(''):'<p>Aún no tienes tarjetas. Agrega una abajo.</p>'}
     <div class="card"><label for="cn">Nueva tarjeta</label><input id="cn" placeholder="Nombre (ej. BBVA)" style="font-size:1rem;margin-bottom:8px"><div class="row"><input id="cd" type="number" inputmode="decimal" placeholder="Deuda actual" style="font-size:1rem"><input id="cl" type="number" inputmode="decimal" placeholder="Límite (opcional)" style="font-size:1rem"></div><button class="opt" style="margin-top:8px" onclick="addCard()">Agregar tarjeta</button></div>${back()}`;
   }
   else if(scr==='goals'){
@@ -194,7 +205,8 @@ function step2(next){
 function deposit(kind,id){
   const a=f.amount,n=f.note?` (${f.note})`:'';let t;
   if(kind==='savings'){S.savings+=a;t='Ingreso a Ahorros';}
-  else if(kind==='debtSavings'){S.debtSavings+=a;t='Ingreso a Ahorro para deudas';}
+  else if(kind==='debit'){S.debit=r2(S.debit+a);t='Depósito a tarjeta de débito';}
+  else if(kind==='cardSave'){const c=S.cards.find(x=>x.id===id);c.saved=r2((c.saved||0)+a);t='Ahorro para tarjeta '+c.name;}
   else if(kind==='card'){const c=S.cards.find(x=>x.id===id);if(a>c.debt){go('dep2',f,{k:'err',t:`Solo debes ${money(c.debt)} en ${esc(c.name)}. Reduce el monto.`});return;}c.debt-=a;t='Pago de tarjeta '+c.name;}
   else{const g=S.goals.find(x=>x.id===id);g.saved+=a;t='Objetivo: '+g.name;}
   log(t+n,a,1);save();go('menu',{},{k:'ok',t:`Listo: ${money(a)} · ${esc(t)}.`});
@@ -203,6 +215,8 @@ function withdraw(kind,id){
   const a=f.amount,compra=f.type==='compra',lab=compra?'Compra':'Retiro',n=f.note?`: ${f.note}`:'';let src;
   if(kind==='savings'){if(S.savings<a)return;S.savings-=a;src='Ahorros';}
   else if(kind==='debtSavings'){if(S.debtSavings<a)return;S.debtSavings-=a;src='Ahorro para deudas';}
+  else if(kind==='debit'){if(S.debit<a)return;S.debit=r2(S.debit-a);src='Tarjeta de débito';}
+  else if(kind==='cardSave'){const c=S.cards.find(x=>x.id===id);if((c.saved||0)<a)return;c.saved=r2(c.saved-a);src='Ahorro para tarjeta '+c.name;}
   else{const c=S.cards.find(x=>x.id===id);c.debt+=a;src='tarjeta '+c.name;}
   log(`${lab}${n} · ${src}`,a,-1);save();
   go('menu',{},{k:'ok',t:`${lab} de ${money(a)} registrado con ${esc(src)}.`});
@@ -210,9 +224,25 @@ function withdraw(kind,id){
 function addCard(){
   const n=$('cn').value.trim(),d=parseFloat($('cd').value)||0,l=parseFloat($('cl').value)||0;
   if(!n){go('acc',{},{k:'err',t:'Ponle un nombre a la tarjeta.'});return;}
-  S.cards.push({id:uid(),name:n,debt:Math.max(0,d),limit:Math.max(0,l)});save();go('acc',{},{k:'ok',t:'Tarjeta agregada.'});
+  S.cards.push({id:uid(),name:n,debt:Math.max(0,d),limit:Math.max(0,l),saved:0});save();go('acc',{},{k:'ok',t:'Tarjeta agregada.'});
 }
-function delCard(id){S.cards=S.cards.filter(c=>c.id!==id);save();go('acc',{},{k:'ok',t:'Tarjeta eliminada.'});}
+function delCard(id){
+  const c=S.cards.find(x=>x.id===id);
+  if(c&&c.saved>0){S.savings=r2(S.savings+c.saved);log('Ahorro de tarjeta eliminada ('+c.name+') regresa a Ahorros',c.saved,0);}
+  S.cards=S.cards.filter(x=>x.id!==id);save();go('acc',{},{k:'ok',t:'Tarjeta eliminada.'+(c&&c.saved>0?' Su ahorro regresó a Ahorros.':'')});
+}
+function payFromSaved(id,to){
+  to=to||'acc';
+  const c=S.cards.find(x=>x.id===id),a=r2(Math.min(c.saved||0,c.debt));
+  if(a<=0){go(to==='menu'?'pay1':to,{},{k:'err',t:'No hay ahorro o deuda para aplicar.'});return;}
+  c.saved=r2(c.saved-a);c.debt=r2(c.debt-a);log('Pago de '+c.name+' con su ahorro',a,0);save();
+  go(to,{},{k:'ok',t:`Pagaste ${money(a)} de ${esc(c.name)} con su ahorro.`+(c.debt>0?` Aún debes ${money(c.debt)}.`:' ¡Tarjeta liquidada!')});
+}
+function assignLegacy(id){
+  const c=S.cards.find(x=>x.id===id),a=S.debtSavings;
+  c.saved=r2((c.saved||0)+a);S.debtSavings=0;log('Ahorro sin asignar pasa a '+c.name,a,0);save();
+  go('acc',{},{k:'ok',t:`${money(a)} asignados a ${esc(c.name)}.`});
+}
 function addGoal(){
   const n=$('gn').value.trim(),t=parseFloat($('gt').value);
   if(!n||!(t>0)){go('goals',{},{k:'err',t:'Escribe un nombre y una meta mayor a cero.'});return;}
@@ -237,8 +267,8 @@ const num=v=>{v=Number(v);return isFinite(v)?v:0;};
 function clean(o){
   if(!o||typeof o!=='object'||o.app!=='mi-cajero'||!o.data)throw new Error('formato');
   const d=o.data;
-  return {savings:num(d.savings),debtSavings:num(d.debtSavings),
-    cards:(Array.isArray(d.cards)?d.cards:[]).map(c=>({id:String(c.id||uid()),name:String(c.name||'Tarjeta').slice(0,40),debt:Math.max(0,num(c.debt)),limit:Math.max(0,num(c.limit))})),
+  return {debit:num(d.debit),savings:num(d.savings),debtSavings:num(d.debtSavings),
+    cards:(Array.isArray(d.cards)?d.cards:[]).map(c=>({id:String(c.id||uid()),name:String(c.name||'Tarjeta').slice(0,40),debt:Math.max(0,num(c.debt)),limit:Math.max(0,num(c.limit)),saved:Math.max(0,num(c.saved))})),
     goals:(Array.isArray(d.goals)?d.goals:[]).map(g=>({id:String(g.id||uid()),name:String(g.name||'Objetivo').slice(0,40),target:Math.max(0,num(g.target)),saved:Math.max(0,num(g.saved))})),
     tx:(Array.isArray(d.tx)?d.tx:[]).slice(0,100).map(t=>({d:String(t.d||''),text:String(t.text||'').slice(0,120),amt:num(t.amt),sign:t.sign>0?1:t.sign<0?-1:0}))};
 }
